@@ -48,7 +48,7 @@ class Settings(BaseSettings):
     max_interview_questions: int = 5
 
     # --- CORS ---
-    cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
+    cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174"
 
     @property
     def cors_origin_list(self) -> list[str]:
