@@ -123,13 +123,25 @@ that hot path free of network latency, rate limits, and per-call cost
 mattered more than the marginal quality gain of a larger hosted model.
 `sentence-transformers/all-MiniLM-L6-v2` runs in-process.
 
-**Chunking strategy.** A sentence-boundary-snapped sliding window, not a hard
-fixed-size cut: each chunk's end is nudged forward to the next
-sentence-ending punctuation within a small lookahead window, so chunks don't
-regularly slice a sentence in half (which damages both embedding quality and
-the grounding quality of what the question generator sees). Consecutive
-chunks overlap by 150 characters so a concept explained across a chunk
-boundary isn't split into two disconnected embeddings.
+**Chunking strategy: semantic, not fixed-size.** Each sentence is embedded, and a
+new chunk starts exactly where cosine similarity to the next sentence drops
+below a threshold (a detected topic shift), bounded by a min/max chunk size so
+neither a long run of similar sentences nor a run of dissimilar short ones
+produces a degenerate chunk. An earlier fixed-character-count chunker (with
+sentence-boundary snapping so it at least didn't cut mid-sentence) routinely
+grouped unrelated sentences together and split single ideas across two
+overlapping chunks, diluting both the embedding signal and the grounding
+handed to the question generator -- a form of "context rot." Semantic
+chunking's boundaries align with actual topic shifts instead, and the old
+overlap mechanism (which existed to avoid losing context at an arbitrary cut
+point) is no longer needed once boundaries are chosen at natural breaks.
+
+**Context-rot mitigation at retrieval time too.** Even with better chunk
+boundaries, a fixed `top_k` can still force in a chunk that isn't actually
+relevant just to fill the quota. `retrieve()` drops any result below
+`RETRIEVAL_MIN_SIMILARITY`, returning fewer than `top_k` chunks (down to a
+guaranteed minimum of one) rather than padding the LLM prompt with
+low-relevance filler that dilutes attention away from what's actually useful.
 
 **Why the knowledge base is original writing, not the linked textbook PDFs.**
 The assignment names specific textbooks (Mitchell's *Machine Learning*, etc.)
