@@ -7,6 +7,9 @@ base — rather than a static, predefined question bank.
 
 Built for the PGAGI AI/ML & Backend Engineering Intern assignment.
 
+> **Demo video:** see [DEMO.md](DEMO.md) for the recording checklist and the
+> video link placeholder (mandatory deliverable, not yet attached).
+
 ## Demo flow at a glance
 
 1. Candidate uploads a resume (PDF/txt) and picks a role (AI/ML Engineer,
@@ -110,6 +113,50 @@ primary path -- the assignment specifically warns against "generic or
 template-driven outputs," which is exactly what the fallback risks being.
 Configure a real key for the intended experience.
 
+## Using the assigned textbook PDFs
+
+The assignment names specific reference books per role (e.g. Mitchell's
+*Machine Learning* for AI/ML Engineer) as the intended primary RAG source.
+This repo ships with original-written articles instead (see "Why the
+knowledge base is original writing" below for the reasoning), but the
+ingestion pipeline was built to accept the real PDFs with **zero code
+changes**. To use them:
+
+1. Download the PDF(s) named in the assignment for the role you want to
+   strengthen (e.g. the Mitchell book, or the Hundred-Page ML Book, for
+   `ai_ml_engineer`; Introduction to ML with Python for `data_scientist`).
+2. Drop the PDF file(s) directly into that role's knowledge base folder --
+   no renaming or preprocessing needed:
+   ```
+   backend/knowledge_base/ai_ml_engineer/machine_learning_mitchell.pdf
+   backend/knowledge_base/data_scientist/intro_to_ml_with_python.pdf
+   ```
+   PDFs coexist with the existing `.md` articles in the same folder; both are
+   ingested together, so adding a PDF only ever *adds* coverage.
+3. Re-run ingestion for that role (or all roles):
+   ```bash
+   cd backend
+   source .venv/bin/activate
+   python scripts/ingest_kb.py ai_ml_engineer   # a single role
+   python scripts/ingest_kb.py                  # or all roles
+   ```
+4. Restart the backend (`uvicorn app.main:app --reload`) so it picks up the
+   updated Chroma collection.
+
+**Caveats to expect with full textbooks, not article-length content:**
+- A full book will produce many more chunks than the existing articles and
+  take noticeably longer to embed on first ingestion (still a one-time cost,
+  not a per-request one).
+- `pypdf` text extraction from real scanned/typeset academic PDFs is not
+  always clean -- page headers/footers, footnotes, and OCR artifacts can end
+  up as stray sentences. The semantic chunker (see below) is reasonably
+  robust to this since it groups by sentence-embedding similarity rather than
+  raw structure, but chunk quality from a real textbook will vary more than
+  from the hand-written articles included here.
+- If ingestion is skipped entirely for a role after a fresh clone, the
+  backend now fails loudly rather than silently degrading -- see "Known
+  limitations" below.
+
 ## Key design decisions
 
 **Why SQLite, not Postgres.** Persistence is required by the assignment, but
@@ -204,6 +251,15 @@ of this codebase:
   the system runs end to end with zero API key configured; it will score a
   correct-but-differently-worded answer unfairly low. The real Groq-backed
   scoring path is the intended experience.
+- **Ingestion is a required manual step after a fresh clone.** A role whose
+  Chroma collection has never been ingested (e.g. `scripts/ingest_kb.py` was
+  never run) now fails loudly with a 503 and an actionable message
+  (`KnowledgeBaseNotIngestedError` in `rag_pipeline.py`) rather than silently
+  falling back to context-free question generation -- previously, a skipped
+  ingestion step was indistinguishable from a normal (if low-relevance)
+  retrieval. There is no automatic ingest-on-first-request fallback by
+  design: ingestion is a deliberate, explicit setup step (see Setup above),
+  not something that should happen implicitly inside a request handler.
 
 ## Repository layout
 
