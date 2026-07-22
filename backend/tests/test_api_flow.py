@@ -121,3 +121,55 @@ def test_answering_completed_session_is_rejected(client):
 
     late_answer = client.post(f"/api/interview/sessions/{session_id}/answer", json={"answer_text": ANSWER_TEXT})
     assert late_answer.status_code == 409
+
+
+def test_starting_session_fails_loudly_when_role_not_ingested(monkeypatch, tmp_path):
+    """
+    A role whose Chroma collection was never ingested must fail loudly (503 with
+    an actionable message), not silently generate a context-free fallback question.
+
+    Deliberately does NOT use the `client` fixture: that fixture's Chroma dir has
+    all three roles already ingested (see conftest.py's session-scoped
+    ingested_chroma_dir), so this test builds its own fully isolated app instance
+    pointed at an empty Chroma directory instead.
+    """
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from tests.conftest import _reset_rag_pipeline_state
+
+    empty_chroma_dir = tmp_path / "empty_chroma"
+    db_path = tmp_path / "isolated.db"
+    monkeypatch.setenv("CHROMA_PERSIST_DIR", str(empty_chroma_dir))
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{db_path}")
+    monkeypatch.setenv("GROQ_API_KEY", "")
+
+    from app.config import get_settings
+
+    get_settings.cache_clear()
+    _reset_rag_pipeline_state()
+
+    from app import database as database_module
+
+    test_engine = create_engine(f"sqlite:///{db_path}", connect_args={"check_same_thread": False})
+    database_module.engine = test_engine
+    database_module.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
+    database_module.init_db()
+
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    with TestClient(app) as isolated_client:
+        upload = isolated_client.post(
+            "/api/candidates",
+            data={"target_role": "backend_engineer", "full_name": "Jane Doe"},
+            files={"resume": ("resume.txt", SAMPLE_RESUME, "text/plain")},
+        )
+        assert upload.status_code == 201
+        candidate_id = upload.json()["id"]
+
+        response = isolated_client.post("/api/interview/sessions", json={"candidate_id": candidate_id})
+        assert response.status_code == 503
+        assert "ingest" in response.json()["detail"].lower()
+        assert "backend_engineer" in response.json()["detail"]
