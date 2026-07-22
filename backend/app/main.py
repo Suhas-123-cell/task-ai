@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse
 from app.config import get_settings
 from app.database import init_db
 from app.routers import candidates, interview, reports
+from app.services.rag_pipeline import KnowledgeBaseNotIngestedError
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -36,6 +37,19 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.exception_handler(KnowledgeBaseNotIngestedError)
+async def knowledge_base_not_ingested_handler(
+    request: Request, exc: KnowledgeBaseNotIngestedError
+) -> JSONResponse:
+    # 503 (Service Unavailable), not 500: this is a known, actionable setup problem
+    # (ingestion was never run for this role), not an unexpected server failure --
+    # fails loudly with a fix-it message instead of silently falling back to
+    # context-free question generation, which would be indistinguishable from a
+    # working-but-low-relevance retrieval to anyone testing the app.
+    logger.warning("Knowledge base not ingested for role '%s'", exc.role)
+    return JSONResponse(status_code=503, content={"detail": str(exc)})
 
 
 @app.exception_handler(Exception)
