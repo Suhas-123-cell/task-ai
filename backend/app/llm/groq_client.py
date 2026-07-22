@@ -32,7 +32,11 @@ def _get_client() -> Groq:
     if _client is None:
         if not settings.groq_api_key:
             raise LLMUnavailableError("GROQ_API_KEY is not set")
-        _client = Groq(api_key=settings.groq_api_key)
+        # Explicit timeout: without one, a hung Groq request would occupy a
+        # threadpool worker indefinitely, undermining the whole point of having a
+        # fallback path for LLM unavailability -- a timeout turns "hung forever"
+        # into "falls back after 15s", which chat_json's broad except already handles.
+        _client = Groq(api_key=settings.groq_api_key, timeout=15.0)
     return _client
 
 
