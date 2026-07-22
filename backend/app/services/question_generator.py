@@ -11,6 +11,8 @@ functions end-to-end with zero API key configured (e.g. for grading or
 offline demoing), but it is explicitly a lower-quality fallback, not the
 intended primary path.
 """
+import re
+
 from app.llm.groq_client import LLMUnavailableError, chat_json, is_llm_configured
 
 QUESTION_SYSTEM_PROMPT = """You are a senior technical interviewer conducting a structured \
@@ -55,6 +57,28 @@ def _topic_label_from_source(source_file: str) -> str:
     return source_file.rsplit(".", 1)[0].replace("_", " ").title()
 
 
+def _clean_snippet(chunk_text: str) -> str:
+    """
+    Pick one clean, complete-looking sentence from a chunk's text for the fallback
+    question to quote.
+
+    Two things this guards against, found via manual testing:
+    1. Splitting on literal ". " (period + space) barely splits the authored KB
+       articles at all, because prose there wraps with a newline after most
+       sentences (period + newline, not period + space) -- so a naive split
+       returned nearly the *entire* chunk as one "sentence." Splitting on any
+       whitespace following sentence-ending punctuation fixes that.
+    2. The first chunk of every KB file starts with a raw "# Heading" line; quoting
+       that verbatim inside a sentence ("...idea from our X material -- '# Caching
+       and Performance...'") reads as broken. Heading lines are stripped first.
+    """
+    without_headings = re.sub(r"^#+\s.*$", "", chunk_text, flags=re.MULTILINE).strip()
+    sentence_candidates = re.split(r"(?<=[.!?])\s+", without_headings)
+    sentences = [s.strip().replace("\n", " ") for s in sentence_candidates if len(s.strip()) > 30]
+    base = sentences[-1] if sentences else without_headings.replace("\n", " ")
+    return base[:220].rstrip(".") + "."
+
+
 def _fallback_question(topic_hint: str, retrieved_chunks: list[dict], experience_level: str) -> dict:
     """
     Deterministic, context-grounded (but template-based) question when no LLM key is set.
@@ -71,8 +95,7 @@ def _fallback_question(topic_hint: str, retrieved_chunks: list[dict], experience
     """
     if retrieved_chunks:
         top_chunk = retrieved_chunks[0]
-        sentences = [s.strip() for s in top_chunk["text"].strip().split(". ") if len(s.strip()) > 30]
-        snippet = (sentences[-1] if sentences else top_chunk["text"].strip())[:220].rstrip(".") + "."
+        snippet = _clean_snippet(top_chunk["text"])
         source_label = _topic_label_from_source(top_chunk["source_file"])
         question = (
             f'Based on the following idea from our {source_label} material -- "{snippet}" -- '

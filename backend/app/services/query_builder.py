@@ -25,16 +25,27 @@ def _candidate_role_skills(role: str, extracted_technologies: list[str]) -> list
 
 
 def opening_query(role: str, extracted_technologies: list[str], experience_level: str) -> tuple[str, str]:
-    """Build the first retrieval query. Returns (query, topic_hint)."""
-    role_skills = _candidate_role_skills(role, extracted_technologies)
-    top_skills = role_skills[:3]
+    """
+    Build the first retrieval query. Returns (query, topic_hint).
 
+    The query is focused on a single skill (the candidate's top role-relevant match),
+    not a blend of several. An earlier version joined the top 3 matched skills into one
+    query string (e.g. "...caching, ci/cd, docker..."), which measurably hurt retrieval
+    precision: the embedding for a multi-skill query often ranked a chunk about a
+    *different* one of those skills above the one actually named as the topic, which
+    then looked incoherent downstream (a question labeled "caching" quoting a snippet
+    about CI/CD). Retrieval precision matters more here than surfacing every matched
+    skill in one query -- the full skill list is still passed to the LLM prompt
+    separately via `matched_skills`, so nothing is lost by narrowing the query itself.
+    """
+    role_skills = _candidate_role_skills(role, extracted_technologies)
     role_label = role.replace("_", " ")
-    if top_skills:
-        topic_hint = top_skills[0]
+
+    if role_skills:
+        topic_hint = role_skills[0]
         query = (
             f"{role_label} interview question testing conceptual and applied understanding of "
-            f"{', '.join(top_skills)}, appropriate for a {experience_level}-level candidate"
+            f"{topic_hint}, appropriate for a {experience_level}-level candidate"
         )
     else:
         topic_hint = role_label
