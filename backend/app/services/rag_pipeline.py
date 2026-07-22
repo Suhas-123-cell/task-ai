@@ -35,7 +35,6 @@ import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from threading import Lock
 
 os.environ.setdefault("ANONYMIZED_TELEMETRY", "False")
 
@@ -50,32 +49,31 @@ settings = get_settings()
 _SENTENCE_BOUNDARY_RE = re.compile(r"[.!?]\s")
 _LOOKAHEAD_WINDOW = 200
 
-_model_lock = Lock()
 _embedding_model: SentenceTransformer | None = None
-
-_client_lock = Lock()
 _chroma_client: chromadb.ClientAPI | None = None
 
 
 def get_embedding_model() -> SentenceTransformer:
+    # Plain lazy singleton, no lock: uvicorn's dev/single-worker setup used here never
+    # calls this from more than one thread before the first request completes warmup,
+    # and the worst case of a lost race (loading the model twice) is a one-time memory
+    # blip, not a correctness issue -- double-checked locking was speculative hardening
+    # for a concurrency scenario this deployment doesn't have (ponytail-review flagged
+    # this as premature; simplified per that review).
     global _embedding_model
     if _embedding_model is None:
-        with _model_lock:
-            if _embedding_model is None:
-                _embedding_model = SentenceTransformer(settings.embedding_model)
+        _embedding_model = SentenceTransformer(settings.embedding_model)
     return _embedding_model
 
 
 def get_chroma_client() -> chromadb.ClientAPI:
     global _chroma_client
     if _chroma_client is None:
-        with _client_lock:
-            if _chroma_client is None:
-                Path(settings.chroma_persist_dir).mkdir(parents=True, exist_ok=True)
-                _chroma_client = chromadb.PersistentClient(
-                    path=settings.chroma_persist_dir,
-                    settings=ChromaSettings(anonymized_telemetry=False),
-                )
+        Path(settings.chroma_persist_dir).mkdir(parents=True, exist_ok=True)
+        _chroma_client = chromadb.PersistentClient(
+            path=settings.chroma_persist_dir,
+            settings=ChromaSettings(anonymized_telemetry=False),
+        )
     return _chroma_client
 
 
