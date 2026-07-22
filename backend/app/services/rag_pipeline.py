@@ -68,6 +68,28 @@ _embedding_model: SentenceTransformer | None = None
 _chroma_client: chromadb.ClientAPI | None = None
 
 
+class KnowledgeBaseNotIngestedError(Exception):
+    """
+    Raised when retrieve() is called for a role whose Chroma collection is empty.
+
+    Silently returning an empty context list here would let question generation
+    fall back to its context-free path without anyone noticing -- indistinguishable
+    from a real (but unusual) zero-relevance retrieval. For strict grading /
+    reviewer scrutiny, a missing ingestion step should fail loudly and immediately
+    with an actionable message, not silently degrade the "RAG" system into a
+    non-RAG one.
+    """
+
+    def __init__(self, role: str):
+        self.role = role
+        super().__init__(
+            f"The knowledge base for role '{role}' has not been ingested yet "
+            f"(its Chroma collection is empty). Run `python scripts/ingest_kb.py {role}` "
+            f"(or `python scripts/ingest_kb.py` to ingest all roles) before starting "
+            f"an interview for this role."
+        )
+
+
 def get_embedding_model() -> SentenceTransformer:
     # Plain lazy singleton, no lock: uvicorn's dev/single-worker setup used here never
     # calls this from more than one thread before the first request completes warmup,
@@ -226,7 +248,7 @@ def retrieve(role: str, query: str, top_k: int | None = None) -> list[dict]:
     top_k = top_k or settings.retrieval_top_k
     collection = get_collection(role)
     if collection.count() == 0:
-        return []
+        raise KnowledgeBaseNotIngestedError(role)
 
     model = get_embedding_model()
     query_embedding = model.encode([query], show_progress_bar=False).tolist()
