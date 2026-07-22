@@ -51,6 +51,8 @@ export default function InterviewPage({ candidate, session, question, onAnswerSu
 
   return (
     <div className="card">
+      <p className="muted small interviewing-as">Interviewing: {candidate.full_name}</p>
+
       <div className="progress-row">
         <span>
           Question {questionNumber} of {totalQuestions}
@@ -68,19 +70,27 @@ export default function InterviewPage({ candidate, session, question, onAnswerSu
         <span className="badge badge-difficulty">{question.difficulty}</span>
       </div>
 
-      <p className="question-text">{question.question_text}</p>
+      <p className="question-text" id="current-question">
+        {question.question_text}
+      </p>
 
-      <button type="button" className="link-button" onClick={() => setShowContext((v) => !v)}>
+      <button
+        type="button"
+        className="link-button"
+        aria-expanded={showContext}
+        aria-controls="context-panel"
+        onClick={() => setShowContext((v) => !v)}
+      >
         {showContext ? "Hide" : "Why this question?"}
       </button>
 
       {showContext && (
-        <div className="context-panel">
+        <div className="context-panel" id="context-panel">
           <p className="muted small">
             Retrieved from the knowledge base using query: <em>{question.retrieval_query}</em>
           </p>
           {question.retrieved_context.map((chunk, i) => (
-            <div key={i} className="context-chunk">
+            <div key={`${chunk.source_file}-${chunk.chunk_index ?? i}`} className="context-chunk">
               <div className="context-chunk-header">
                 <span>{chunk.source_file}</span>
                 <span>relevance {Math.round(chunk.similarity_score * 100)}%</span>
@@ -92,20 +102,29 @@ export default function InterviewPage({ candidate, session, question, onAnswerSu
       )}
 
       {lastFeedback ? (
-        <div className="feedback-flash">
+        <div className="feedback-flash" role="status" aria-live="polite">
           <strong>Score: {lastFeedback.score}/5</strong>
           <p>{lastFeedback.feedback}</p>
         </div>
       ) : (
         <form onSubmit={handleSubmit} className="answer-form">
+          <label className="visually-hidden" htmlFor="answer-textarea">
+            Your answer
+          </label>
           <textarea
+            id="answer-textarea"
+            aria-labelledby="current-question"
             value={answerText}
             onChange={(e) => setAnswerText(e.target.value)}
             placeholder="Type your answer here..."
             rows={6}
             disabled={isSubmitting}
           />
-          {error && <p className="error-text">{error}</p>}
+          {error && (
+            <p className="error-text" role="alert" aria-live="assertive">
+              {error}
+            </p>
+          )}
           <button type="submit" disabled={isSubmitting}>
             {isSubmitting ? "Submitting..." : "Submit Answer"}
           </button>

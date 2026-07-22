@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import UploadPage from "./pages/UploadPage.jsx";
 import InterviewPage from "./pages/InterviewPage.jsx";
 import SummaryPage from "./pages/SummaryPage.jsx";
@@ -19,6 +19,16 @@ export default function App() {
   const [candidate, setCandidate] = useState(null);
   const [session, setSession] = useState(null);
   const [currentQuestion, setCurrentQuestion] = useState(null);
+  const mainRef = useRef(null);
+
+  // Focus management across wizard stages: since there's no router/page
+  // navigation, a screen reader user gets no default signal that the content
+  // just changed (upload -> interview -> summary). Moving focus to the main
+  // region on every stage change, combined with aria-live below, announces
+  // the transition instead of silently swapping content underneath the user.
+  useEffect(() => {
+    mainRef.current?.focus();
+  }, [stage]);
 
   function handleInterviewStarted({ candidate: newCandidate, session: newSession, question }) {
     setCandidate(newCandidate);
@@ -50,7 +60,7 @@ export default function App() {
         <p className="app-subtitle">RAG-driven role-specific technical interviews</p>
       </header>
 
-      <main className="app-main">
+      <main className="app-main" ref={mainRef} tabIndex={-1} aria-live="polite">
         {stage === STAGES.UPLOAD && <UploadPage onInterviewStarted={handleInterviewStarted} />}
         {stage === STAGES.INTERVIEW && candidate && session && currentQuestion && (
           <InterviewPage
