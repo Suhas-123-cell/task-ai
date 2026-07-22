@@ -4,15 +4,42 @@ pre-ingested Chroma vector store, so the test suite never depends on (or
 mutates) a developer's real backend/data/{app.db,chroma}.
 """
 import os
+import hashlib
 import tempfile
 from pathlib import Path
 
+import numpy as np
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 ROLES_TO_INGEST = ("ai_ml_engineer", "backend_engineer", "data_scientist")
+
+
+class _TestEmbeddingModel:
+    """Small deterministic embedding model for tests.
+
+    Tests should validate our ingestion/retrieval plumbing, not depend on
+    Hugging Face network/cache state. This keeps the isolated Chroma fixture
+    fast, deterministic, and fully offline.
+    """
+
+    dimension = 32
+
+    def encode(self, texts, show_progress_bar=False, normalize_embeddings=False):
+        vectors = []
+        for text in texts:
+            vector = np.zeros(self.dimension, dtype=np.float32)
+            for token in str(text).lower().split():
+                digest = hashlib.sha256(token.encode("utf-8")).digest()
+                vector[digest[0] % self.dimension] += 1.0
+            if normalize_embeddings:
+                norm = np.linalg.norm(vector)
+                if norm:
+                    vector = vector / norm
+            vectors.append(vector)
+        return np.vstack(vectors)
 
 
 def _reset_rag_pipeline_state():
@@ -33,6 +60,7 @@ def _reset_rag_pipeline_state():
 
     rag_pipeline.settings = get_settings()
     rag_pipeline._chroma_client = None
+    rag_pipeline._embedding_model = _TestEmbeddingModel()
 
 
 @pytest.fixture(scope="session")
@@ -53,7 +81,13 @@ def ingested_chroma_dir(tmp_path_factory):
     from app.services.rag_pipeline import ingest_role
 
     for role in ROLES_TO_INGEST:
-        count = ingest_role(role)
+        # .md/.txt only, not .pdf: the real knowledge_base/ai_ml_engineer directory
+        # now also contains two full real textbook PDFs (thousands of chunks each);
+        # ingesting those on every test session would balloon the suite from ~12s to
+        # several minutes for no test-value gain, since the hand-written articles
+        # already exercise the same chunking/retrieval code paths the tests care
+        # about. See rag_pipeline.load_role_documents()'s docstring for more detail.
+        count = ingest_role(role, extensions=(".md", ".txt"))
         assert count > 0, f"Expected fixture ingestion for '{role}' to produce chunks"
 
     return chroma_dir

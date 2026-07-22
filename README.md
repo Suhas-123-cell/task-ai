@@ -89,7 +89,7 @@ python scripts/ingest_kb.py       # builds the vector store from knowledge_base/
 uvicorn app.main:app --reload --port 8000
 ```
 
-Run the test suite: `pytest tests/ -v` (15 tests, all passing against the
+Run the test suite: `pytest tests/ -v` (18 tests, all passing against the
 deterministic fallback path -- no API key needed to run tests).
 
 ### Frontend
@@ -115,32 +115,62 @@ Configure a real key for the intended experience.
 
 ## Using the assigned textbook PDFs
 
-The assignment names specific reference books per role (e.g. Mitchell's
-*Machine Learning* for AI/ML Engineer) as the intended primary RAG source.
-This repo ships with original-written articles instead (see "Why the
-knowledge base is original writing" below for the reasoning), but the
-ingestion pipeline was built to accept the real PDFs with **zero code
-changes**. To use them:
+The assignment names specific reference books per role as the intended
+primary RAG source. Two of the assignment's linked PDFs are genuinely,
+officially free (author/publisher-sanctioned), and are included directly in
+this repo alongside the original-written articles:
 
-1. Download the PDF(s) named in the assignment for the role you want to
-   strengthen (e.g. the Mitchell book, or the Hundred-Page ML Book, for
-   `ai_ml_engineer`; Introduction to ML with Python for `data_scientist`).
-2. Drop the PDF file(s) directly into that role's knowledge base folder --
-   no renaming or preprocessing needed:
+- `backend/knowledge_base/ai_ml_engineer/machine_learning_mitchell.pdf` --
+  Tom Mitchell's *Machine Learning*, hosted on his own CMU faculty page
+  (`cs.cmu.edu/~tom/`). 421 pages, verified to extract real chapter text
+  (e.g. Concept Learning, Bayesian Learning -- matching this repo's own
+  article topics).
+- `backend/knowledge_base/ai_ml_engineer/pattern_recognition_bishop.pdf` --
+  Christopher Bishop's *Pattern Recognition and Machine Learning*, hosted
+  officially by Microsoft Research (`microsoft.com/en-us/research/`). 758
+  pages, verified to extract real content.
+
+Both are ingested automatically alongside the `.md` articles in the same
+folder (adding a PDF only ever *adds* coverage, never replaces anything).
+
+**The assignment's other 5 linked PDFs were deliberately NOT fetched.**
+Inspecting the actual URLs (every one carries a `?utm_source=chatgpt.com`
+suffix, suggesting they were surfaced by an AI web search rather than
+vetted by hand) shows they point to what appear to be unauthorized mirrors
+of commercially-sold books -- a well-known piracy aggregator (PDFDrive), a
+GitHub-hosted copy with `z-lib.org` literally in its filename, and several
+obscure third-party mirror sites, none of them the author's or publisher's
+own official distribution. Redistributing those via a public git repository
+would mean hosting infringing copies of commercial books, which this
+project does not do regardless of the assignment's own sourcing. They are
+listed below for reference only, in case you want to source them yourself
+through a channel you're comfortable with (e.g. purchasing the book, or a
+library):
+
+| Book | Role | Link as given in the assignment |
+|---|---|---|
+| Burkov, *The Hundred-Page ML Book* | ai_ml_engineer | (unauthorized mirror, not linked here) |
+| *Machine Learning for Absolute Beginners* | ai_ml_engineer | (unauthorized mirror, not linked here) |
+| Muller & Guido, *Intro to ML with Python* | data_scientist | (PDFDrive mirror, not linked here) |
+| Brownlee, *Master ML Algorithms* | data_scientist | (z-lib mirror, not linked here) |
+| *AI, Machine Learning & Deep Learning* | ai_ml_engineer | (unauthorized mirror, not linked here) |
+
+To add any additional PDF (from a source you've verified yourself) for any
+role:
+
+1. Drop the PDF file directly into that role's knowledge base folder --
+   no renaming or preprocessing needed, e.g.:
    ```
-   backend/knowledge_base/ai_ml_engineer/machine_learning_mitchell.pdf
    backend/knowledge_base/data_scientist/intro_to_ml_with_python.pdf
    ```
-   PDFs coexist with the existing `.md` articles in the same folder; both are
-   ingested together, so adding a PDF only ever *adds* coverage.
-3. Re-run ingestion for that role (or all roles):
+2. Re-run ingestion for that role (or all roles):
    ```bash
    cd backend
    source .venv/bin/activate
    python scripts/ingest_kb.py ai_ml_engineer   # a single role
    python scripts/ingest_kb.py                  # or all roles
    ```
-4. Restart the backend (`uvicorn app.main:app --reload`) so it picks up the
+3. Restart the backend (`uvicorn app.main:app --reload`) so it picks up the
    updated Chroma collection.
 
 **Caveats to expect with full textbooks, not article-length content:**
@@ -190,20 +220,24 @@ relevant just to fill the quota. `retrieve()` drops any result below
 guaranteed minimum of one) rather than padding the LLM prompt with
 low-relevance filler that dilutes attention away from what's actually useful.
 
-**Why the knowledge base is original writing, not the linked textbook PDFs.**
-The assignment names specific textbooks (Mitchell's *Machine Learning*, etc.)
-as the intended source. Reliably fetching and redistributing full copyrighted
-textbook PDFs within the assignment window was both unreliable and legally
-murky for a public repo. Instead, `backend/knowledge_base/` contains 22
-original technical articles (8 for AI/ML Engineer mirroring Mitchell's table
-of contents -- concept learning, decision trees, neural networks, Bayesian
-learning, instance-based learning, computational learning theory,
-reinforcement learning, hypothesis evaluation; 8 for Backend Engineer; 6 for
-Data Scientist) at comparable technical depth. The ingestion pipeline is
-format-agnostic (`.md`, `.txt`, and `.pdf` are all supported in
-`load_role_documents`) -- dropping the real textbook PDFs into the same
-directories and re-running `scripts/ingest_kb.py` swaps in the actual source
-material with zero code changes.
+**Why the knowledge base is mostly original writing, with two real textbooks
+added where a legitimate source existed.** The assignment names specific
+textbooks as the intended source, but most of its own linked PDFs turned out
+to be unauthorized mirrors of commercially-sold books (see "Using the
+assigned textbook PDFs" above) -- redistributing those via a public repo
+was not something this project would do regardless of the assignment's own
+sourcing. `backend/knowledge_base/` contains 22 original technical articles
+(8 for AI/ML Engineer mirroring Mitchell's table of contents -- concept
+learning, decision trees, neural networks, Bayesian learning, instance-based
+learning, computational learning theory, reinforcement learning, hypothesis
+evaluation; 8 for Backend Engineer; 6 for Data Scientist) at comparable
+technical depth, **plus** the full text of Mitchell's *Machine Learning* and
+Bishop's *Pattern Recognition and Machine Learning* -- both fetched from
+their author/publisher's own official free hosting, not a mirror -- in
+`ai_ml_engineer`. The ingestion pipeline is format-agnostic (`.md`, `.txt`,
+and `.pdf` are all supported in `load_role_documents`), so any additional
+legitimately-sourced PDF can be dropped into the same directories and picked
+up by re-running `scripts/ingest_kb.py` with zero code changes.
 
 **Adaptive question flow.** `query_builder.next_query` implements the
 assignment's optional-but-valued adaptivity: a previous answer scoring below
