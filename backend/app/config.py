@@ -34,9 +34,21 @@ class Settings(BaseSettings):
 
     # --- RAG / embeddings ---
     embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
-    chunk_size_chars: int = 900
-    chunk_overlap_chars: int = 150
+    # Semantic chunking: split at sentence boundaries where embedding similarity to
+    # the next sentence drops below this threshold (a topic shift), instead of a
+    # fixed character count. min/max bound the result so a long run of similar
+    # sentences doesn't produce one giant chunk, and a run of dissimilar short
+    # sentences doesn't produce many tiny, context-poor ones.
+    semantic_similarity_threshold: float = 0.55
+    min_chunk_chars: int = 300
+    max_chunk_chars: int = 1400
     retrieval_top_k: int = 4
+    # Context-rot mitigation: a retrieved chunk below this cosine similarity adds
+    # noise/dilution to the LLM prompt rather than useful grounding, so it's dropped
+    # even if that means returning fewer than retrieval_top_k chunks. Always keeps at
+    # least one chunk (the single best match) so a question is never generated with
+    # zero context.
+    retrieval_min_similarity: float = 0.15
 
     # --- LLM (Groq) ---
     groq_api_key: str | None = None

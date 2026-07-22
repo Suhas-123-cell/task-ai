@@ -4,22 +4,36 @@ storage, and retrieval.
 
 Design decisions (assignment section 6, "AI/ML Requirements"):
 
-Chunking strategy -- sentence-boundary-snapped sliding window, not a fixed
-hard cut. A pure fixed-size cut (e.g. every 900 characters no matter what)
-will regularly slice a sentence in half, which both damages embedding
-quality (the embedding model sees a syntactically broken fragment) and
-damages the retrieved context handed to the question generator (a
-half-sentence is a worse grounding source than a complete one). Instead,
-each chunk's boundary is snapped forward to the next sentence-ending
-period within a small lookahead window, so chunks are close to the target
-size but end on a complete thought.
+Semantic chunking, not a fixed-size sliding window. An earlier version split
+text purely by character count (with sentence-boundary snapping so it at
+least didn't cut mid-sentence). That still had a real weakness: a fixed
+character budget has no idea where one idea actually ends and the next
+begins, so it routinely grouped unrelated sentences into one chunk and
+split single ideas across two overlapping chunks -- diluting each
+embedding's signal and, downstream, diluting the context handed to the
+question generator (a known RAG failure mode sometimes called "context
+rot": stuffing a prompt with loosely-related or redundant text degrades
+the model's ability to attend to what actually matters). Semantic chunking
+instead embeds each sentence, walks through them in order, and starts a new
+chunk exactly where cosine similarity to the next sentence drops below
+`semantic_similarity_threshold` -- i.e. where the topic actually shifts.
+`min_chunk_chars`/`max_chunk_chars` bound the result so a long run of
+similar sentences doesn't produce one giant chunk and a run of dissimilar
+short sentences doesn't produce many context-poor slivers. This also
+removes the old overlap mechanism entirely: overlap existed to avoid
+losing context AT an arbitrary cut point, but a chunk boundary chosen at an
+actual topic shift has much less continuity to lose in the first place, so
+the storage/redundancy cost of overlap is no longer worth paying.
 
-Context preservation -- consecutive chunks overlap by `chunk_overlap_chars`
-characters. Without overlap, a concept explained across a chunk boundary
-(e.g. "Entropy is defined as X. | Information gain then uses this to...")
-would have its two halves embedded and retrieved completely independently,
-losing the connective context. Overlap trades a small amount of storage
-duplication for much better continuity.
+Context-rot mitigation at retrieval time, not just at ingestion time. Even
+with better chunk boundaries, a fixed `top_k` will still sometimes force in
+a chunk that isn't actually relevant to the query, purely to fill the
+quota -- that chunk is then quoted or referenced in the LLM prompt as if it
+were meaningful grounding, which is exactly the dilution problem semantic
+chunking is trying to avoid on the ingestion side. `retrieve()` therefore
+drops any result below `retrieval_min_similarity`, accepting fewer than
+top_k chunks (down to a guaranteed minimum of one) rather than padding the
+prompt with low-relevance filler.
 
 Retrieval efficiency -- embeddings are generated once at ingestion time and
 persisted in a local Chroma collection (one collection per role), so a
@@ -39,6 +53,7 @@ from pathlib import Path
 os.environ.setdefault("ANONYMIZED_TELEMETRY", "False")
 
 import chromadb
+import numpy as np
 from chromadb.config import Settings as ChromaSettings
 from sentence_transformers import SentenceTransformer
 
@@ -46,8 +61,8 @@ from app.config import KNOWLEDGE_BASE_DIR, get_settings
 
 settings = get_settings()
 
-_SENTENCE_BOUNDARY_RE = re.compile(r"[.!?]\s")
-_LOOKAHEAD_WINDOW = 200
+_HEADING_RE = re.compile(r"^#+\s.*$", re.MULTILINE)
+_SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+")
 
 _embedding_model: SentenceTransformer | None = None
 _chroma_client: chromadb.ClientAPI | None = None
@@ -95,31 +110,59 @@ class Chunk:
     chunk_index: int
 
 
-def chunk_text(text: str, source_file: str, chunk_size: int, overlap: int) -> list[Chunk]:
-    """Sentence-boundary-snapped sliding window chunker. See module docstring."""
-    text = text.strip()
+def _split_into_sentences(text: str) -> list[str]:
+    without_headings = _HEADING_RE.sub("", text).strip()
+    return [s.strip() for s in _SENTENCE_SPLIT_RE.split(without_headings) if s.strip()]
+
+
+def semantic_chunk_text(
+    text: str,
+    source_file: str,
+    model: SentenceTransformer,
+    similarity_threshold: float,
+    min_chunk_chars: int,
+    max_chunk_chars: int,
+) -> list[Chunk]:
+    """Group consecutive sentences into chunks, breaking at detected topic shifts.
+    See module docstring for the reasoning."""
+    sentences = _split_into_sentences(text)
+    if not sentences:
+        return []
+    if len(sentences) == 1:
+        return [Chunk(text=sentences[0], source_file=source_file, chunk_index=0)]
+
+    # normalize_embeddings=True gives unit vectors, so a plain dot product between
+    # consecutive sentence embeddings IS their cosine similarity -- no separate
+    # normalization step needed at comparison time.
+    embeddings = model.encode(sentences, show_progress_bar=False, normalize_embeddings=True)
+
     chunks: list[Chunk] = []
-    start = 0
     chunk_index = 0
-    n = len(text)
+    current_sentences = [sentences[0]]
+    current_len = len(sentences[0])
 
-    while start < n:
-        end = min(start + chunk_size, n)
-        if end < n:
-            lookahead_end = min(end + _LOOKAHEAD_WINDOW, n)
-            window = text[end:lookahead_end]
-            match = _SENTENCE_BOUNDARY_RE.search(window)
-            if match:
-                end = end + match.end()
+    for i in range(1, len(sentences)):
+        similarity = float(np.dot(embeddings[i - 1], embeddings[i]))
+        sentence = sentences[i]
+        would_be_len = current_len + 1 + len(sentence)
 
-        chunk_str = text[start:end].strip()
-        if chunk_str:
-            chunks.append(Chunk(text=chunk_str, source_file=source_file, chunk_index=chunk_index))
+        topic_shift = similarity < similarity_threshold
+        over_max = would_be_len > max_chunk_chars
+        under_min = current_len < min_chunk_chars
+
+        if (topic_shift or over_max) and not under_min:
+            chunks.append(
+                Chunk(text=" ".join(current_sentences), source_file=source_file, chunk_index=chunk_index)
+            )
             chunk_index += 1
+            current_sentences = [sentence]
+            current_len = len(sentence)
+        else:
+            current_sentences.append(sentence)
+            current_len = would_be_len
 
-        if end >= n:
-            break
-        start = max(end - overlap, start + 1)
+    if current_sentences:
+        chunks.append(Chunk(text=" ".join(current_sentences), source_file=source_file, chunk_index=chunk_index))
 
     return chunks
 
@@ -147,17 +190,24 @@ def ingest_role(role: str) -> int:
     """Chunk + embed + store every document for a role. Returns chunk count. Idempotent."""
     documents = load_role_documents(role)
     collection = get_collection(role)
+    model = get_embedding_model()
 
     all_chunks: list[Chunk] = []
     for filename, text in documents:
         all_chunks.extend(
-            chunk_text(text, filename, settings.chunk_size_chars, settings.chunk_overlap_chars)
+            semantic_chunk_text(
+                text,
+                filename,
+                model,
+                settings.semantic_similarity_threshold,
+                settings.min_chunk_chars,
+                settings.max_chunk_chars,
+            )
         )
 
     if not all_chunks:
         return 0
 
-    model = get_embedding_model()
     embeddings = model.encode([c.text for c in all_chunks], show_progress_bar=False).tolist()
 
     ids = [f"{role}::{c.source_file}::{c.chunk_index}" for c in all_chunks]
@@ -170,7 +220,9 @@ def ingest_role(role: str) -> int:
 
 
 def retrieve(role: str, query: str, top_k: int | None = None) -> list[dict]:
-    """Embed `query` and return the top_k most relevant chunks for `role`."""
+    """Embed `query`, return the top_k most relevant chunks for `role`, and drop any
+    below `retrieval_min_similarity` (context-rot mitigation -- see module docstring),
+    while always keeping at least the single best match."""
     top_k = top_k or settings.retrieval_top_k
     collection = get_collection(role)
     if collection.count() == 0:
@@ -198,4 +250,6 @@ def retrieve(role: str, query: str, top_k: int | None = None) -> list[dict]:
                 "similarity_score": round(1 - distance, 4),
             }
         )
-    return retrieved
+
+    above_threshold = [r for r in retrieved if r["similarity_score"] >= settings.retrieval_min_similarity]
+    return above_threshold if above_threshold else retrieved[:1]
