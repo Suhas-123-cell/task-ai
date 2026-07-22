@@ -189,17 +189,29 @@ def semantic_chunk_text(
     return chunks
 
 
-def load_role_documents(role: str) -> list[tuple[str, str]]:
-    """Return (filename, raw_text) for every supported document under a role's KB dir."""
+def load_role_documents(
+    role: str, extensions: tuple[str, ...] = (".md", ".txt", ".pdf")
+) -> list[tuple[str, str]]:
+    """Return (filename, raw_text) for every supported document under a role's KB dir.
+
+    `extensions` defaults to everything (the normal app/ingestion path); tests pass a
+    narrower tuple (see conftest.py) to skip large PDF textbooks and keep the suite
+    fast -- ingesting the full real book PDFs on every test run would balloon the
+    suite from ~12s to several minutes for no test-value gain, since the hand-written
+    .md articles already exercise the same chunking/retrieval code paths.
+    """
     role_dir = KNOWLEDGE_BASE_DIR / role
     if not role_dir.exists():
         raise ValueError(f"No knowledge base directory found for role '{role}'")
 
     documents = []
     for path in sorted(role_dir.glob("*")):
-        if path.suffix.lower() in (".md", ".txt"):
+        suffix = path.suffix.lower()
+        if suffix not in extensions:
+            continue
+        if suffix in (".md", ".txt"):
             documents.append((path.name, path.read_text(encoding="utf-8")))
-        elif path.suffix.lower() == ".pdf":
+        elif suffix == ".pdf":
             from pypdf import PdfReader
 
             reader = PdfReader(str(path))
@@ -208,9 +220,10 @@ def load_role_documents(role: str) -> list[tuple[str, str]]:
     return documents
 
 
-def ingest_role(role: str) -> int:
-    """Chunk + embed + store every document for a role. Returns chunk count. Idempotent."""
-    documents = load_role_documents(role)
+def ingest_role(role: str, extensions: tuple[str, ...] = (".md", ".txt", ".pdf")) -> int:
+    """Chunk + embed + store every document for a role. Returns chunk count. Idempotent.
+    See load_role_documents() for what `extensions` is for (tests pass a narrower tuple)."""
+    documents = load_role_documents(role, extensions=extensions)
     collection = get_collection(role)
     model = get_embedding_model()
 
@@ -236,8 +249,22 @@ def ingest_role(role: str) -> int:
     metadatas = [{"source_file": c.source_file, "chunk_index": c.chunk_index, "role": role} for c in all_chunks]
     documents_text = [c.text for c in all_chunks]
 
-    # upsert (not add) so re-running ingestion after editing a KB file is safe and idempotent
-    collection.upsert(ids=ids, embeddings=embeddings, metadatas=metadatas, documents=documents_text)
+    # Chroma enforces a hard max batch size per upsert() call (5461 in the installed
+    # version) that a handful of short markdown articles never approached, but a full
+    # textbook PDF's chunk count can exceed easily. Batching here keeps ingestion
+    # correct regardless of corpus size instead of failing once a large enough
+    # document is added -- found via a real ingestion failure ("Batch size of 6343 is
+    # greater than max batch size of 5461") when the first real textbook PDFs were
+    # added to the ai_ml_engineer knowledge base.
+    batch_size = 5000
+    for start in range(0, len(all_chunks), batch_size):
+        end = start + batch_size
+        collection.upsert(
+            ids=ids[start:end],
+            embeddings=embeddings[start:end],
+            metadatas=metadatas[start:end],
+            documents=documents_text[start:end],
+        )
     return len(all_chunks)
 
 
