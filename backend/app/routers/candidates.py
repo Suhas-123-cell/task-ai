@@ -38,19 +38,27 @@ def list_roles() -> list[RoleInfo]:
 
 
 @router.post("/candidates", response_model=CandidateOut, status_code=201)
-async def upload_candidate(
+def upload_candidate(
     target_role: str = Form(...),
     full_name: str = Form("Candidate"),
     resume: UploadFile = File(...),
     db: DBSession = Depends(get_db),
 ) -> Candidate:
+    # Deliberately a sync `def` route, not `async def`: this handler does blocking
+    # work (pypdf text extraction, synchronous SQLAlchemy commit/refresh below), and
+    # FastAPI runs sync routes in a worker thread automatically. An earlier version
+    # was `async def` while still calling these same blocking calls directly on the
+    # event loop -- which would stall every other in-flight request during an upload,
+    # unlike every other route in this app (all correctly plain `def` for the same
+    # reason). Caught by an independent backend review, not by the test suite, since
+    # the bug only shows up under real concurrency, not a single sequential test run.
     if target_role not in ROLES:
         raise HTTPException(status_code=400, detail=f"Unknown role '{target_role}'. Valid roles: {list(ROLES)}")
 
     if not resume.filename.lower().endswith(ALLOWED_EXTENSIONS):
         raise HTTPException(status_code=400, detail=f"Resume must be one of: {ALLOWED_EXTENSIONS}")
 
-    file_bytes = await resume.read()
+    file_bytes = resume.file.read()
     if len(file_bytes) > MAX_RESUME_BYTES:
         raise HTTPException(status_code=400, detail="Resume file exceeds 5MB limit")
     if not file_bytes:
