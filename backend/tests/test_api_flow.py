@@ -16,10 +16,21 @@ Backend Engineer, TechCorp (2022-2025)
 - Implemented caching layer with Redis
 """
 
+# Broad, multi-topic answer: semantic chunking (see rag_pipeline.py) produces more
+# topically distinct chunks than the old sliding-window chunker did, so a narrow
+# single-topic canned answer now correctly scores weak against unrelated topics --
+# which is the adaptive engine working *better*, not worse. This test is about
+# verifying topic ADVANCEMENT on a strong answer, so the answer itself needs broad
+# enough vocabulary to score reasonably regardless of which backend topic comes up.
 ANSWER_TEXT = (
     "We use Redis as a shared cache in front of PostgreSQL, keying entries by request "
     "parameters and setting a TTL to bound staleness, invalidating on writes that touch "
-    "that data so reads stay fast without serving badly stale results."
+    "that data so reads stay fast without serving badly stale results. We containerize "
+    "the service with Docker, using small cache-friendly layers, and deploy it via a "
+    "Kubernetes Deployment behind a Service, with a GitHub Actions CI/CD pipeline that "
+    "runs the test suite and builds a tagged image before rollout. The REST API itself "
+    "is built with FastAPI, validated with pydantic schemas, and covered by pytest "
+    "integration tests against a real database."
 )
 
 
