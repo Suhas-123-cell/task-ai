@@ -36,11 +36,24 @@ def extract_text_from_upload(filename: str, file_bytes: bytes) -> str:
 
 
 def extract_matched_terms(resume_text: str, vocabulary: list[str]) -> list[str]:
-    """Case-insensitive, word-boundary-safe substring match against a vocabulary list."""
+    """Case-insensitive, word-boundary-safe substring match against a vocabulary list.
+
+    Single-character terms ("c", "r") use a stricter boundary than everything else:
+    ordinary alnum-only boundaries let them match inside "C++"/"C#" (the "+"/"#" count
+    as a boundary) or abbreviations like "C.S."/"M.S." (the "." counts as a boundary),
+    producing a spurious bare "c" match alongside the real "c++" match. Found via a
+    real bug report: that stray "c" ended up quoted verbatim in a generated interview
+    question. Multi-character terms keep the original (looser) boundary since they
+    need it -- e.g. "node.js" must still match right up against a following period.
+    """
     lowered = resume_text.lower()
     matched = []
     for term in vocabulary:
-        pattern = r"(?<![a-z0-9])" + re.escape(term.lower()) + r"(?![a-z0-9])"
+        term_lower = term.lower()
+        if len(term_lower) <= 1:
+            pattern = r"(?<![a-z0-9+#.])" + re.escape(term_lower) + r"(?![a-z0-9+#.])"
+        else:
+            pattern = r"(?<![a-z0-9])" + re.escape(term_lower) + r"(?![a-z0-9])"
         if re.search(pattern, lowered):
             matched.append(term)
     return matched

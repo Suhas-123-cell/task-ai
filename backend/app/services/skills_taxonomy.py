@@ -66,3 +66,39 @@ ROLE_SKILL_FOCUS = {
     "data_scientist": DATA_SCIENCE_SKILLS + ML_AI_SKILLS + PROGRAMMING_LANGUAGES,
     "backend_engineer": BACKEND_SKILLS + CLOUD_DEVOPS + PROGRAMMING_LANGUAGES,
 }
+
+# Natural-language display forms for taxonomy tokens that read badly verbatim
+# (e.g. a raw "c" or "rest api" inserted into a generated sentence looks like a
+# typo/fragment, not a topic name). Only entries that actually need correction
+# are listed; everything else falls through to a plain .title() in
+# display_label(). Found via a real reported bug: a candidate's resume matched
+# bare "c" (from "C++"/"C#" adjacency or an abbreviation like "C.S."), and that
+# raw lowercase token was quoted directly in a generated question ("...relates
+# to c, in your own words...").
+DISPLAY_OVERRIDES = {
+    "c": "C", "r": "R",
+    "rest api": "REST API", "restful": "RESTful", "graphql": "GraphQL",
+    "ci/cd": "CI/CD", "sql": "SQL", "nosql": "NoSQL",
+    "aws": "AWS", "gcp": "GCP", "azure": "Azure",
+    "oauth": "OAuth", "jwt": "JWT", "orm": "ORM", "api": "API",
+    "cnn": "CNN", "rnn": "RNN", "lstm": "LSTM", "svm": "SVM", "pca": "PCA",
+    "gan": "GAN", "nlp": "NLP", "llm": "LLM", "rag": "RAG",
+    "opencv": "OpenCV", "yolo": "YOLO", "mlflow": "MLflow",
+    "eda": "EDA", "etl": "ETL", "a/b testing": "A/B Testing",
+    "postgresql": "PostgreSQL", "postgres": "PostgreSQL", "mysql": "MySQL",
+    "mongodb": "MongoDB", "sqlalchemy": "SQLAlchemy", "fastapi": "FastAPI",
+    "grpc": "gRPC", "node.js": "Node.js", "nodejs": "Node.js",
+    "kubernetes": "Kubernetes", "pytorch": "PyTorch", "tensorflow": "TensorFlow",
+    "scikit-learn": "scikit-learn", "sklearn": "scikit-learn",
+}
+
+
+def display_label(term: str) -> str:
+    """Render a taxonomy token (always stored/matched lowercase) for display in
+    generated questions and UI badges. See DISPLAY_OVERRIDES docstring above."""
+    lowered = term.lower().strip()
+    if lowered in DISPLAY_OVERRIDES:
+        return DISPLAY_OVERRIDES[lowered]
+    if len(lowered) <= 1:
+        return lowered.upper()
+    return term.title()

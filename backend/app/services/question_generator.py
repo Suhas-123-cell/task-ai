@@ -14,6 +14,7 @@ intended primary path.
 import re
 
 from app.llm.groq_client import LLMUnavailableError, chat_json, is_llm_configured
+from app.services.skills_taxonomy import display_label
 
 QUESTION_SYSTEM_PROMPT = """You are a senior technical interviewer conducting a structured \
 screening interview. You will be given: the target role, signals extracted from the \
@@ -99,13 +100,16 @@ def _fallback_question(topic_hint: str, retrieved_chunks: list[dict], experience
         source_label = _topic_label_from_source(top_chunk["source_file"])
         question = (
             f'Based on the following idea from our {source_label} material -- "{snippet}" -- '
-            f"explain how this relates to {topic_hint}, in your own words, and describe a "
-            f"situation where it would matter in practice."
+            f"explain how this relates to {display_label(topic_hint)}, in your own words, and "
+            f"describe a situation where it would matter in practice."
         )
     else:
-        question = f"Describe your practical experience with {topic_hint} and a challenge you faced applying it."
+        question = (
+            f"Describe your practical experience with {display_label(topic_hint)} and a "
+            f"challenge you faced applying it."
+        )
 
-    return {"question": question, "topic": topic_hint, "difficulty": experience_level}
+    return {"question": question, "topic": display_label(topic_hint), "difficulty": experience_level}
 
 
 def generate_question(
@@ -133,7 +137,7 @@ def generate_question(
         f"Target role: {role.replace('_', ' ')}\n"
         f"Candidate experience level: {experience_level}\n"
         f"Candidate's relevant skills from resume: {', '.join(matched_skills) or 'none extracted'}\n"
-        f"Focus topic for this question: {topic_hint}\n\n"
+        f"Focus topic for this question: {display_label(topic_hint)}\n\n"
         f"Retrieved reference excerpts:\n{context_block}"
         f"{prev_block}"
     )
@@ -146,7 +150,7 @@ def generate_question(
         # adaptive/coverage logic in query_builder keys off topic_hint, so an LLM-invented
         # label here would silently break topic-coverage tracking the same way the
         # fallback path's bug did (see _fallback_question's docstring for that failure mode).
-        result["topic"] = topic_hint
+        result["topic"] = display_label(topic_hint)
         result.setdefault("difficulty", experience_level)
         return result
     except (LLMUnavailableError, ValueError, KeyError):
