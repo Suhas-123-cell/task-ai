@@ -81,7 +81,11 @@ export default function UploadPage({ onInterviewStarted }) {
           />
         </label>
 
-        {error && <p className="error-text">{error}</p>}
+        {error && (
+          <p className="error-text" role="alert" aria-live="assertive">
+            {error}
+          </p>
+        )}
 
         <button type="submit" disabled={isSubmitting}>
           {isSubmitting ? "Starting interview..." : "Start Interview"}
