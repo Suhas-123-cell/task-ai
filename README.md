@@ -133,27 +133,35 @@ this repo alongside the original-written articles:
 Both are ingested automatically alongside the `.md` articles in the same
 folder (adding a PDF only ever *adds* coverage, never replaces anything).
 
-**The assignment's other 5 linked PDFs were deliberately NOT fetched.**
-Inspecting the actual URLs (every one carries a `?utm_source=chatgpt.com`
+**The assignment's other 5 linked PDFs were deliberately NOT committed to
+git.** Inspecting the actual URLs (every one carries a `?utm_source=chatgpt.com`
 suffix, suggesting they were surfaced by an AI web search rather than
 vetted by hand) shows they point to what appear to be unauthorized mirrors
 of commercially-sold books -- a well-known piracy aggregator (PDFDrive), a
-GitHub-hosted copy with `z-lib.org` literally in its filename, and several
-obscure third-party mirror sites, none of them the author's or publisher's
-own official distribution. Redistributing those via a public git repository
+copy with `z-lib.org` literally in its filename, and other obscure
+third-party mirror sites, none of them the author's or publisher's own
+official distribution. Redistributing those via a public git repository
 would mean hosting infringing copies of commercial books, which this
-project does not do regardless of the assignment's own sourcing. They are
-listed below for reference only, in case you want to source them yourself
-through a channel you're comfortable with (e.g. purchasing the book, or a
-library):
+project does not do regardless of the assignment's own sourcing or who is
+requesting it.
 
-| Book | Role | Link as given in the assignment |
+They are present **locally only** (used to enrich local RAG demoing) and
+explicitly excluded in `.gitignore` -- they exist on the machine this was
+developed on but were never `git add`ed, committed, or pushed, and cloning
+this repository will not include them:
+
+| Book | Role | Local filename (gitignored) |
 |---|---|---|
-| Burkov, *The Hundred-Page ML Book* | ai_ml_engineer | (unauthorized mirror, not linked here) |
-| *Machine Learning for Absolute Beginners* | ai_ml_engineer | (unauthorized mirror, not linked here) |
-| Muller & Guido, *Intro to ML with Python* | data_scientist | (PDFDrive mirror, not linked here) |
-| Brownlee, *Master ML Algorithms* | data_scientist | (z-lib mirror, not linked here) |
-| *AI, Machine Learning & Deep Learning* | ai_ml_engineer | (unauthorized mirror, not linked here) |
+| Burkov, *The Hundred-Page ML Book* | ai_ml_engineer | `burkov_hundred_page_ml_book.pdf` |
+| *Machine Learning for Absolute Beginners* | ai_ml_engineer | `ml_for_absolute_beginners.pdf` |
+| *AI, Machine Learning & Deep Learning* | ai_ml_engineer | `ai_ml_deep_learning_overview.pdf` |
+| Muller & Guido, *Intro to ML with Python* | data_scientist | `intro_to_ml_with_python.pdf` |
+| Brownlee, *Master ML Algorithms* | data_scientist | `master_ml_algorithms_brownlee.pdf` |
+
+If you want these in your own local copy of this repo, you'd need to source
+them yourself through a channel you're comfortable with (purchasing the
+book, a library, etc.) and drop them into the paths above -- re-running
+ingestion (below) picks them up the same way it would any other PDF.
 
 To add any additional PDF (from a source you've verified yourself) for any
 role:
