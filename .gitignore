@@ -28,11 +28,6 @@ npm-debug.log*
 # Locally-sourced textbook PDFs of uncertain redistribution rights: used to
 # enrich local RAG demoing, deliberately NEVER committed to this public repo.
 # See README's "Using the assigned textbook PDFs" section for the reasoning.
-backend/knowledge_base/ai_ml_engineer/burkov_hundred_page_ml_book.pdf
-backend/knowledge_base/ai_ml_engineer/ml_for_absolute_beginners.pdf
-backend/knowledge_base/ai_ml_engineer/ai_ml_deep_learning_overview.pdf
-backend/knowledge_base/data_scientist/intro_to_ml_with_python.pdf
-backend/knowledge_base/data_scientist/master_ml_algorithms_brownlee.pdf
 
 # OS
 .DS_Store
