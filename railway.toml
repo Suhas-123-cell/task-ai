@@ -1,0 +1,25 @@
+# Railway config for the COMBINED single-service deployment: one service,
+# built from the repo-root Dockerfile, serving both the API and the built
+# frontend from one FastAPI process. Root Directory in the Railway dashboard
+# should be left as the repo root (not "backend" or "frontend") for this mode.
+#
+# This is an alternative to backend/railway.toml + frontend/railway.toml
+# (the two-separate-services approach) -- use one or the other, not both.
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+startCommand = "/app/docker-entrypoint.sh"
+healthcheckPath = "/api/health"
+healthcheckTimeout = 100
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3
+
+# Required manual steps in the Railway dashboard (not expressible in this file):
+# 1. Attach a Volume mounted at /app/data -- see docker-entrypoint.sh's
+#    comment for why ingestion must run at container start, not build time.
+# 2. Set GROQ_API_KEY (your real key). CORS_ORIGINS is not needed in this
+#    mode: frontend and backend share one origin, so there's no
+#    cross-origin request to configure.

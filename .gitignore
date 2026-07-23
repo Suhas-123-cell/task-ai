@@ -25,6 +25,10 @@ frontend/dist/
 frontend/.vite/
 npm-debug.log*
 
+# Combined single-service Docker build output (see repo-root Dockerfile) --
+# generated fresh by every build, never hand-edited or committed.
+backend/static/
+
 # Locally-sourced textbook PDFs of uncertain redistribution rights: used to
 # enrich local RAG demoing, deliberately NEVER committed to this public repo.
 # See README's "Using the assigned textbook PDFs" section for the reasoning.

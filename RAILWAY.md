@@ -1,49 +1,53 @@
 # Deploying to Railway
 
-This is a two-service app (FastAPI backend + React frontend), so it needs
-**two separate Railway services** from this one repo, each pointed at a
-different subdirectory. Railway's native config format is TOML/JSON, not
-YAML -- `backend/railway.toml` and `frontend/railway.toml` are the actual
-files Railway reads.
+## Combined single-service deployment (recommended)
 
-## 1. Backend service
+One Railway service, built from the repo-root `Dockerfile`: FastAPI serves
+both the API and the built React frontend from a single process, at one
+URL, with no CORS configuration needed at all.
 
-1. In Railway: **New Service → Deploy from GitHub repo** → this repo.
-2. Set **Root Directory** to `backend`.
-3. Railway will detect `backend/railway.toml` automatically (Nixpacks
-   builder, installs `requirements.txt`, runs `scripts/ingest_kb.py` at
-   build time, starts `uvicorn`).
-4. **Attach a Volume** mounted at `/app/data`. Without this, Railway's
-   filesystem is ephemeral -- every redeploy would silently wipe the
-   SQLite database (all interview history) and the Chroma vector store,
-   forcing a full re-ingestion on every deploy.
-5. Set environment variables (Settings → Variables):
-   - `GROQ_API_KEY` -- your real key, for real LLM-quality questions/scoring.
-   - `CORS_ORIGINS` -- the frontend service's public URL once you have it
-     (step 2.3 below); update this after creating the frontend service.
-6. Deploy. Note the backend's public URL (Settings → Networking →
-   Generate Domain) -- you'll need it for the frontend.
+1. Railway → **New Project** → **Deploy from GitHub repo** → this repo.
+2. Leave **Root Directory** as the repo root (don't set it to `backend` or
+   `frontend`). Railway detects `railway.toml` at the root, which points at
+   the Dockerfile.
+3. **Settings → Volumes** → attach a volume mounted at `/app/data`. Without
+   this, Railway's filesystem is ephemeral and every redeploy wipes the
+   SQLite database and the vector store. (`docker-entrypoint.sh` runs
+   knowledge-base ingestion at container *start*, not build time,
+   specifically so it writes into this real, persisted volume rather than a
+   throwaway build-time filesystem — and skips re-ingesting if the volume
+   already has data, so restarts don't waste time re-embedding everything.)
+4. **Settings → Variables** → set `GROQ_API_KEY` to your real key.
+   `CORS_ORIGINS` is not needed in this mode — there's only one origin.
+5. Deploy. **Settings → Networking → Generate Domain** gives you the one
+   URL for everything: open it in a browser, and it's what goes in your
+   demo video / submission.
 
-## 2. Frontend service
+This is what `railway.toml` (repo root), `Dockerfile`, and
+`docker-entrypoint.sh` are for.
 
-1. **New Service → Deploy from GitHub repo** → this repo again.
-2. Set **Root Directory** to `frontend`.
-3. Set environment variable `VITE_API_BASE_URL` to the backend's public URL
-   from step 1.6 (e.g. `https://your-backend.up.railway.app`) **before the
-   first build** -- Vite bakes env vars into the built JS bundle at build
-   time, so setting this after deploying does nothing until you trigger a
-   rebuild.
-4. Railway will detect `frontend/railway.toml` (builds with `npm run
-   build`, serves the static output with `serve`).
-5. Deploy. Note the frontend's public URL, and go back to the backend
-   service to set `CORS_ORIGINS` to it (step 1.5) -- then redeploy the
-   backend so the new CORS origin takes effect.
+## Alternative: two separate services
 
-## Known limitation on Railway specifically
+If you'd rather run the frontend and backend as independent services (e.g.
+to scale or redeploy them separately), `backend/railway.toml` and
+`frontend/railway.toml` support that instead — **use one approach or the
+other, not both** (don't create three Railway services from one repo).
+
+1. **Backend service**: Root Directory = `backend`. Same Volume-at-`/app/data`
+   requirement as above. Set `GROQ_API_KEY`, and `CORS_ORIGINS` to the
+   frontend service's public URL (set this after step 2, once you have it).
+2. **Frontend service**: Root Directory = `frontend`. Set
+   `VITE_API_BASE_URL` to the backend's public URL **before the first
+   build** — Vite bakes it into the built JS at build time, so setting it
+   afterward does nothing until you trigger a rebuild.
+3. Go back to the backend service and set `CORS_ORIGINS` to the frontend's
+   URL from step 2, then redeploy the backend.
+
+## Known limitation on either deployment mode
 
 This app has **no authentication** and **no rate limiting** (documented in
-README's "Known limitations" section) -- fine for a local demo, but if this
-Railway deployment is left publicly reachable, anyone can hit the
-Groq-backed endpoints and drive real API cost, or view any candidate's
-data by guessing an ID. Consider this before leaving a public deployment
-running longer than needed for grading/demo purposes.
+README's "Known limitations" section) — fine for a local demo, but if a
+Railway deployment (either mode) is left publicly reachable, anyone who
+finds the URL can use it and drive real Groq API cost, or view any
+candidate's data by guessing an ID. Consider this before leaving a public
+deployment running longer than needed for grading/demo purposes.
