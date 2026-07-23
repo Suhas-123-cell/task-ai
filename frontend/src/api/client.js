@@ -3,7 +3,14 @@
 // exactly one backend endpoint and throws a normal Error with the backend's
 // `detail` message on failure so components can show it directly.
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+// Nullish coalescing (??), not ||: when this app is deployed as a single
+// combined service (FastAPI serving these built static files itself, see
+// backend/app/main.py), VITE_API_BASE_URL is deliberately set to an empty
+// string at build time so requests go to relative /api/... paths on the
+// same origin. `||` would treat that empty string as falsy and silently
+// fall back to the localhost default, breaking same-origin deployment;
+// `??` only falls back when the var is genuinely unset (local dev).
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
 
 async function handleResponse(response) {
   if (!response.ok) {
