@@ -57,6 +57,81 @@ the components interact.
      scoring (or fallback logic if recording without a configured API key --
      mention which mode is active).
 
+## Word-for-word narration script
+
+Read this naturally, don't rush it -- pause and let the screen catch up
+where noted. Roughly 3-4 minutes if you don't linger.
+
+---
+
+**[Opening, ~10s]**
+
+> "Hi, this is my submission for the AI-powered candidate screening
+> assignment. It's a system that generates technical interview questions
+> dynamically -- from a candidate's resume, their target role, and a
+> Retrieval-Augmented Generation pipeline over a role-specific knowledge
+> base -- rather than pulling from a fixed question bank. Let me walk
+> through it."
+
+**[Resume upload + role selection, ~20s]** *(show the upload screen)*
+
+> "First, the candidate uploads their resume -- PDF or plain text -- and
+> picks a target role. I'll pick [Backend Engineer / AI-ML Engineer / Data
+> Scientist] and upload this resume."
+
+*(upload it, wait for it to process)*
+
+> "Behind the scenes, the backend just parsed this resume, matched it
+> against a skills taxonomy, and estimated an experience level -- all of
+> that feeds into what gets asked next."
+
+**[First generated question, ~40s]** *(show the question, badges)*
+
+> "Here's the first question. Notice it has a topic and a difficulty badge
+> -- both driven by what's actually in the resume. Now let me show where
+> this question actually came from."
+
+*(click "Why this question?")*
+
+> "This panel shows the exact retrieval query the system built, and the
+> exact knowledge-base excerpts it retrieved to ground this question --
+> with similarity scores. The question wasn't invented by the model out of
+> nothing; it's required to be answerable from this specific retrieved
+> context. Every question in this system is traceable back to its source
+> like this, all the way down to the database."
+
+**[Answering through the interview, ~60-90s]** *(answer, show feedback, repeat)*
+
+> "I'll answer this."
+
+*(type a real answer, submit, let the score/feedback flash show)*
+
+> "It's scored against that same retrieved context, with specific
+> feedback, not just a number. Now watch the next question -- since that
+> answer was solid, it moves on to a new topic instead of repeating itself.
+> If I'd answered weakly, it would re-probe the same topic at a more basic
+> level instead -- that adaptive behavior is driven by the previous
+> answer's score."
+
+*(answer through the remaining questions, faster / can speed up in editing)*
+
+**[Final report, ~30s]** *(show the summary page)*
+
+> "And here's the final report: an overall score, a narrative summary,
+> strengths and improvement areas, and a score breakdown by topic. Scrolling
+> down, the full transcript -- every question, answer, and score -- is
+> persisted, not just this summary."
+
+**[Close, ~15s]**
+
+> "Architecture-wise: React frontend, FastAPI backend, a Chroma vector
+> store per role built with semantic chunking over the knowledge base, and
+> [Groq's LLM for question generation and scoring / deterministic fallback
+> logic, since I'm demoing without an API key configured] -- both are
+> fully documented in the repo's README. Thanks for watching."
+
+---
+
 ## Notes for whoever records this
 
 - If recording without a `GROQ_API_KEY` configured, the system still runs
