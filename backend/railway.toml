@@ -1,0 +1,28 @@
+# Railway deployment config for the backend service.
+# Railway's native config format is TOML/JSON, not YAML -- this is the file
+# Railway actually reads (a literal "railway.yml" would silently be ignored).
+# In the Railway dashboard: create a service, set its Root Directory to
+# "backend", and it will pick this file up automatically.
+
+[build]
+builder = "NIXPACKS"
+# Runs once per deploy: installs deps (Nixpacks auto-detects requirements.txt),
+# then builds the vector store from the knowledge_base/ articles so the
+# service is immediately usable with RAG-grounded questions on first boot.
+buildCommand = "pip install -r requirements.txt && python scripts/ingest_kb.py"
+
+[deploy]
+startCommand = "uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+healthcheckPath = "/api/health"
+healthcheckTimeout = 100
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3
+
+# Required manual steps in the Railway dashboard (not expressible in this file):
+# 1. Attach a Volume mounted at /app/data -- SQLite (app.db) and the Chroma
+#    vector store both live under backend/data/, and Railway's filesystem is
+#    otherwise ephemeral (wiped on every redeploy), which would silently lose
+#    all interview history and force a re-ingestion on every deploy.
+# 2. Set environment variables: GROQ_API_KEY (your real key), CORS_ORIGINS
+#    (the frontend service's public Railway URL, e.g.
+#    https://your-frontend.up.railway.app -- must be exact, no trailing slash).
