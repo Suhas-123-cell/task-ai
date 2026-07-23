@@ -398,3 +398,15 @@ button:disabled {
 .app-main:focus {
   outline: none;
 }
+
+.score-low {
+  color: var(--color-danger);
+}
+
+.score-mid {
+  color: #a35b00;
+}
+
+.score-high {
+  color: var(--color-success);
+}

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { fetchReport } from "../api/client.js";
+import { scoreColorClass } from "../utils/scoreColor.js";
 
 export default function SummaryPage({ sessionId, onRestart }) {
   const [report, setReport] = useState(null);
@@ -35,7 +36,9 @@ export default function SummaryPage({ sessionId, onRestart }) {
       <h2>Interview Summary</h2>
 
       <div className="overall-score">
-        <span className="overall-score-number">{report.overall_score.toFixed(1)}</span>
+        <span className={`overall-score-number ${scoreColorClass(report.overall_score)}`}>
+          {report.overall_score.toFixed(1)}
+        </span>
         <span className="overall-score-label">/ 5 overall</span>
       </div>
 
@@ -71,7 +74,9 @@ export default function SummaryPage({ sessionId, onRestart }) {
                 style={{ width: `${(t.average_score / maxTopicScore) * 100}%` }}
               />
             </div>
-            <span className="topic-bar-score">{t.average_score.toFixed(1)}</span>
+            <span className={`topic-bar-score ${scoreColorClass(t.average_score)}`}>
+              {t.average_score.toFixed(1)}
+            </span>
           </div>
         ))}
       </div>
@@ -86,7 +91,9 @@ export default function SummaryPage({ sessionId, onRestart }) {
             <p className="transcript-answer">{pair.answer ? pair.answer.answer_text : "(no answer)"}</p>
             {pair.answer && (
               <p className="transcript-feedback">
-                Score: {pair.answer.score}/5 -- {pair.answer.feedback}
+                <span className={scoreColorClass(pair.answer.score)}>Score: {pair.answer.score}/5</span>
+                {" -- "}
+                {pair.answer.feedback}
               </p>
             )}
           </div>
