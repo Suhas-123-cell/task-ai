@@ -13,7 +13,15 @@ dockerfilePath = "Dockerfile"
 [deploy]
 startCommand = "/app/docker-entrypoint.sh"
 healthcheckPath = "/api/health"
-healthcheckTimeout = 100
+# 30 minutes, not the 100s default: the FIRST cold start on a fresh volume
+# blocks on a full knowledge-base ingestion (Mitchell + Bishop textbooks,
+# thousands of chunks) before uvicorn even starts listening -- on
+# Railway's CPU-only build hardware this can take several minutes, well
+# past the previous 100s window, which caused every deploy's health check
+# to time out and fail even though the build itself succeeded. Once the
+# volume has ingested data, docker-entrypoint.sh skips re-ingestion on
+# every subsequent restart, so this long timeout only matters once.
+healthcheckTimeout = 1800
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 3
 
