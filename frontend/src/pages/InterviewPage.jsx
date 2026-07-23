@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { submitAnswer } from "../api/client.js";
+import { scoreColorClass } from "../utils/scoreColor.js";
 
 export default function InterviewPage({ candidate, session, question, onAnswerSubmitted }) {
   const [answerText, setAnswerText] = useState("");
@@ -103,7 +104,7 @@ export default function InterviewPage({ candidate, session, question, onAnswerSu
 
       {lastFeedback ? (
         <div className="feedback-flash" role="status" aria-live="polite">
-          <strong>Score: {lastFeedback.score}/5</strong>
+          <strong className={scoreColorClass(lastFeedback.score)}>Score: {lastFeedback.score}/5</strong>
           <p>{lastFeedback.feedback}</p>
         </div>
       ) : (
