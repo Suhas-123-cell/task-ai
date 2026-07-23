@@ -26,6 +26,21 @@ URL, with no CORS configuration needed at all.
 This is what `railway.toml` (repo root), `Dockerfile`, and
 `docker-entrypoint.sh` are for.
 
+**Known issue and fix: OOM during first ingestion.** The full textbook PDFs
+(Mitchell + Bishop, thousands of chunks) were found to get the ingestion
+process killed by Railway's default container memory limit on first
+deploy — the deploy log showed `running knowledge base ingestion...
+Killed` repeating on every restart, the Linux OOM-killer's signature (no
+Python traceback, since SIGKILL can't be caught). `docker-entrypoint.sh`
+now runs `scripts/ingest_kb.py --skip-pdf` for the deployed container
+specifically, ingesting only the lightweight original `.md` articles (a
+few dozen chunks, seconds to embed, minimal memory) instead of the full
+textbooks. **This means the deployed app is grounded in the original
+articles, not the two committed textbook PDFs** — for the full
+textbook-grounded experience (e.g. for your demo video), run locally
+instead (`python scripts/ingest_kb.py`, no flag), or upgrade to a Railway
+plan with more memory and remove `--skip-pdf` from `docker-entrypoint.sh`.
+
 ## Alternative: two separate services
 
 If you'd rather run the frontend and backend as independent services (e.g.
