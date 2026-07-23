@@ -81,14 +81,19 @@ def ingested_chroma_dir(tmp_path_factory):
     from app.services.rag_pipeline import ingest_role
 
     for role in ROLES_TO_INGEST:
-        # .md/.txt only, not .pdf: the real knowledge_base/ai_ml_engineer directory
-        # now also contains two full real textbook PDFs (thousands of chunks each);
-        # ingesting those on every test session would balloon the suite from ~12s to
-        # several minutes for no test-value gain, since the hand-written articles
-        # already exercise the same chunking/retrieval code paths the tests care
-        # about. See rag_pipeline.load_role_documents()'s docstring for more detail.
+        # .md/.txt only, not .pdf: ai_ml_engineer and data_scientist now contain
+        # only full real textbook PDFs (thousands of chunks each, no .md articles --
+        # those were deliberately removed); ingesting those on every test session
+        # would balloon the suite from ~12s to several minutes for no test-value
+        # gain. See rag_pipeline.load_role_documents()'s docstring for more detail.
         count = ingest_role(role, extensions=(".md", ".txt"))
-        assert count > 0, f"Expected fixture ingestion for '{role}' to produce chunks"
+        # Only backend_engineer is asserted non-empty: it's the only role any test
+        # actually exercises functionally (see test_api_flow.py's _upload_candidate
+        # default and test_rag_pipeline.py) and the only one that still has .md
+        # articles -- ai_ml_engineer/data_scientist are expected to ingest to 0
+        # chunks here (their content is PDF-only, intentionally skipped in tests).
+        if role == "backend_engineer":
+            assert count > 0, f"Expected fixture ingestion for '{role}' to produce chunks"
 
     return chroma_dir
 
